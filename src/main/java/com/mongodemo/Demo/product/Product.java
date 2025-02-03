@@ -3,6 +3,7 @@ package com.mongodemo.Demo.product;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -16,7 +17,9 @@ public class Product {
     @Id
     private String id;
 
+    @NotBlank(message = "Name is required")
     private String name;
 
+    @NotBlank(message = "Description is required")
     private String description;
 }
