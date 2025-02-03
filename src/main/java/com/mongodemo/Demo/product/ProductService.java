@@ -6,11 +6,12 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import com.mongodemo.Demo.ResponseModel;
 import com.mongodemo.Demo.ResponseStatus;
+import com.mongodemo.Demo.category.Category;
+import com.mongodemo.Demo.category.CategoryRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,26 +20,57 @@ import lombok.RequiredArgsConstructor;
 public class ProductService {
     @Autowired
     private ProductRepository productRepository;
+    @Autowired
+    private CategoryRepository categoryRepository;
 
     public ResponseModel<?> save(Product product) {
         try {
-            // Save product and get the generated ID
-            String p = productRepository.save(product).getId();
+            String categoryName = Optional.ofNullable(product)
+                    .map(Product::getCategory)
+                    .map(Category::getName)
+                    .orElse(null);
 
-            // Create response data
-            Map<String, String> dataMap = new HashMap<>();
-            dataMap.put("id", p);
+            if (categoryName != null) {
+                categoryName = categoryName.toLowerCase().trim();
 
-            return new ResponseModel<>(ResponseStatus.SUCCESS, "Product Created", dataMap);
-        } catch (DataIntegrityViolationException e) {
-            // Handles database constraint violations (e.g., unique constraints, null
-            // values)
-            return new ResponseModel<>(ResponseStatus.FAILURE, "Database Constraint Violation", null);
-        } catch (IllegalArgumentException e) {
-            // Handles cases where the input entity is null
-            return new ResponseModel<>(ResponseStatus.FAILURE, "Invalid Product Data", null);
+                // Try to get the existing category
+                Category existingCategory = categoryRepository.findByName(categoryName);
+
+                // If no existing category, create a new one
+                if (existingCategory == null) {
+                    existingCategory = Category.builder()
+                            .name(categoryName)
+                            .build();
+                    categoryRepository.save(existingCategory);
+                }
+
+                // Assign the category to the product
+                product.setCategory(existingCategory);
+
+                // Save the product and get its ID
+                String pId = productRepository.save(product).getId();
+
+                // Update the category with the new product if not already added
+                if (!existingCategory.getProducts().contains(pId)) {
+                    List<String> addedProducts = existingCategory.getProducts();
+                    addedProducts.add(pId);
+                    existingCategory.setProducts(addedProducts);
+                    categoryRepository.save(existingCategory); // Save the updated category
+                }
+
+                return new ResponseModel<>(ResponseStatus.SUCCESS, "Product created", null);
+            } else {
+                // Save the product and get its ID
+                String pId = productRepository.save(product).getId();
+
+                // Response data map
+                Map<String, String> dataMap = new HashMap<>();
+                dataMap.put("id", pId);
+
+                return new ResponseModel<>(ResponseStatus.SUCCESS, "Product Created", dataMap);
+            }
         } catch (Exception e) {
-            // Generic catch for unexpected errors
+            System.out.println("Error => " + e.getMessage());
             return new ResponseModel<>(ResponseStatus.FAILURE, "An error occurred while saving the product", null);
         }
     }
